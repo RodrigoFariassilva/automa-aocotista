@@ -13,6 +13,12 @@ def remove_accents(input_str):
     nfkd_form = unicodedata.normalize('NFKD', input_str)
     return u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
 
+def normalize_column(df, col_name):
+    if col_name in df.columns:
+        df[col_name] = df[col_name].astype(str).str.upper().str.strip()
+        df[col_name] = df[col_name].apply(remove_accents)
+    return df
+
 def remove_chars_and_terms(df, col_name):
     chars_and_terms_to_remove = [' ', '.', '/', '-', 'SA', 'LTDA']
     if col_name in df.columns:
@@ -24,6 +30,7 @@ def remove_chars_and_terms(df, col_name):
 # ============================
 # Carregamento de arquivos
 # ============================
+
 def carregar_csv(caminho_arquivo):
     try:
         df = pd.read_csv(caminho_arquivo, delimiter=';')
@@ -40,18 +47,54 @@ def carregar_excel(caminho_arquivo):
         print(f"Erro ao carregar Excel: {e}")
         return pd.DataFrame()
 
-def process_xlsx_files(dir_path):
+def process_excel_files(dir_path):
     dfs = {}
     try:
-        for i, filename in enumerate(os.listdir(dir_path), start=1):
-            if filename.endswith('.xlsx'):
+        arquivos = os.listdir(dir_path)
+        print("Arquivos encontrados:", arquivos)  # Opcional para debug
+        for i, filename in enumerate(arquivos, start=1):
+            if filename.endswith(('.xlsx', '.xls')):
                 file_path = os.path.join(dir_path, filename)
-                df = carregar_excel(file_path)
-                dfs[f'df{i}'] = df
+                try:
+                    # Usa openpyxl para .xlsx e xlrd para .xls
+                    engine = 'openpyxl' if filename.endswith('.xlsx') else 'xlrd'
+                    df = pd.read_excel(file_path, engine=engine)
+                    dfs[f'df{i}'] = df
+                except Exception as e:
+                    print(f"Erro ao ler {file_path}: {e}")
         return dfs
     except Exception as e:
-        print(f"Erro ao processar arquivos XLSX: {e}")
+        print(f"Erro ao processar arquivos Excel: {e}")
         return {}
+
+def carregar_fundos_multiplos(diretorio):
+    fundos_ids_padrao = {
+        'FIDCSENIOR': 20711,
+        'FIDCMEZ1': 20731,
+        'FIDCMEZ2': 20732,
+        'FIDCMEZ3': 20733,
+        'FIDCMEZ4': 20734,
+        'FIDCMEZ5': 20735
+    }
+
+    arquivos_excel = [os.path.join(diretorio, f) for f in os.listdir(diretorio) if f.endswith(('.xls', '.xlsx'))]
+    dfs = []
+    for arquivo in arquivos_excel:
+        try:
+            df = pd.read_excel(arquivo, engine='openpyxl' if arquivo.endswith('.xlsx') else None)
+            dfs.append(df)
+        except Exception as e:
+            print(f"Erro ao ler {arquivo}: {e}")
+    df_fundos = pd.concat(dfs, ignore_index=True)
+
+    df_fundos.columns = [col.strip().upper() for col in df_fundos.columns]
+    df_fundos = normalize_column(df_fundos, 'FUNDO')
+
+    if 'ID_FUNDO' not in df_fundos.columns:
+        df_fundos['ID_FUNDO'] = df_fundos['FUNDO'].map(fundos_ids_padrao).fillna(20711).astype(int)
+
+    fundos_ids = dict(zip(df_fundos['FUNDO'], df_fundos['ID_FUNDO']))
+    return df_fundos, fundos_ids
 
 # ============================
 # Funções de transformação
@@ -82,40 +125,8 @@ def processar_transacoes(df):
     df = df.drop(['APLICAR', 'RESGATAR', 'TITULAR'], axis=1)
     return df
 
-# ============================
-# Carregamento dinâmico de fundos
-# ============================
-
-def carregar_fundos(caminho_arquivo):
-    try:
-        df_fundos = pd.read_excel(caminho_arquivo, engine="openpyxl")
-        # Normaliza nomes das colunas
-        df_fundos.columns = [col.strip().upper() for col in df_fundos.columns]
-
-        # Dicionário padrão para IDs
-        fundos_ids_padrao = {
-            'FIDCSENIOR': 20711,
-            'FIDCMEZ1': 20731,
-            'FIDCMEZ2': 20732,
-            'FIDCMEZ3': 20733,
-            'FIDCMEZ4': 20734,
-            'FIDCMEZ5': 20735
-        }
-
-        # Se coluna CARTEIRA não existir, cria com base no dicionário
-        if 'CARTEIRA' not in df_fundos.columns:
-            df_fundos['CARTEIRA'] = df_fundos['FUNDO'].map(fundos_ids_padrao)
-
-        # Cria dicionário de mapeamento
-        fundos_ids = dict(zip(df_fundos['FUNDO'], df_fundos['CARTEIRA']))
-        return df_fundos, fundos_ids
-    except Exception as e:
-        print(f"Erro ao carregar fundos: {e}")
-        return pd.DataFrame(), {}
-
-
-
 def adicionar_id_fundo(df_movimentacoes, fundos_ids):
+    df_movimentacoes = normalize_column(df_movimentacoes, 'FUNDO')
     df_movimentacoes['ID'] = df_movimentacoes['FUNDO'].map(fundos_ids).fillna(20711).astype(int)
     df_movimentacoes['ID_Fundo'] = df_movimentacoes['ID'].astype(str)
     return df_movimentacoes
@@ -136,26 +147,42 @@ def ajustar_valor(df):
     df['Valor'] = df['Valor'].apply(lambda val: "{:015.2f}".format(val).replace('.', ','))
     return df
 
-def dataframe_para_prn(df, nome_arquivo, larguras):
-    for col in df.columns:
-        df[col] = df[col].astype(str).apply(lambda x: x.ljust(larguras[col]))
-    with open(nome_arquivo, 'w') as f:
+def dataframe_para_prn(df, nome_arquivo):
+    # Define as posições iniciais de cada coluna
+    posicoes = [0, 15, 34, 44, 69]
+    colunas = ['ID_Fundo', 'Cliente', 'Transacao', 'DT.TRANSAÇÃO', 'Valor']
+
+    with open(nome_arquivo, 'w', encoding='utf-8') as f:
         for _, row in df.iterrows():
-            f.write(''.join(row) + '\n')
+            linha = [' '] * 100  # linha com 100 espaços (ajustável)
+            for i, col in enumerate(colunas):
+                valor = str(row[col])
+                for j, char in enumerate(valor):
+                    if posicoes[i] + j < len(linha):
+                        linha[posicoes[i] + j] = char
+            f.write(''.join(linha).rstrip() + '\n')
+
 
 # ============================
 # Fluxo principal
 # ============================
 
 if __name__ == "__main__":
-    caminho_cotistas = r'P:\\MER\\Contratados\\Estagiários\\Rodrigo Farias\\A MOV DIA PETRO\\cotistas\\Lista Cotistas.csv'
-    caminho_fundos = r'P:\MER\Contratados\Estagiários\Rodrigo Farias\A MOV DIA PETRO\transacoes\Transações (1)_TARDE.xlsx'
-    dir_path = r'P:\\MER\\Contratados\\Estagiários\\Rodrigo Farias\\A MOV DIA PETRO\\transacoes'
+    caminho_cotistas = r'Z:\MER\Contratados\Estagiários\Rodrigo Farias\A MOV DIA PETRO\cotistas\Lista Cotistas.csv'
+    dir_fundos = r'Z:\\MER\\Contratados\\Estagiários\\Rodrigo Farias\\A MOV DIA PETRO\\transacoes'
+    dir_path = r'Z:\\MER\\Contratados\\Estagiários\\Rodrigo Farias\\A MOV DIA PETRO\\transacoes'
+
+    if not os.path.exists(caminho_cotistas):
+        raise FileNotFoundError(f"Arquivo não encontrado: {caminho_cotistas}")
+    if not os.path.exists(dir_fundos):
+        raise FileNotFoundError(f"Diretório não encontrado: {dir_fundos}")
+    if not os.path.exists(dir_path):
+        raise FileNotFoundError(f"Diretório não encontrado: {dir_path}")
 
     cotistas = carregar_csv(caminho_cotistas)
     cotistas = remove_chars_and_terms(cotistas, 'Nome')
 
-    dfs = process_xlsx_files(dir_path)
+    dfs = process_excel_files(dir_path)
     df_transacoes = pd.concat(dfs.values(), ignore_index=True)
     df_transacoes = selecionar_colunas(df_transacoes)
     df_transacoes = titulares(df_transacoes)
@@ -165,15 +192,10 @@ if __name__ == "__main__":
 
     df_movimentacoes = processar_transacoes(df_transacoes)
 
-    df_fundos, fundos_ids = carregar_fundos(caminho_fundos)
+    df_fundos, fundos_ids = carregar_fundos_multiplos(dir_fundos)
     df_movimentacoes = adicionar_id_fundo(df_movimentacoes, fundos_ids)
     df_movimentacoes = reordenar_colunas(df_movimentacoes)
     df_movimentacoes = formatar_data(df_movimentacoes)
     df_movimentacoes = ajustar_valor(df_movimentacoes)
 
-    larguras = {'ID_Fundo': 20, 'Cliente': 19, 'Transacao': 10, 'DT.TRANSAÇÃO': 25, 'Valor': 16}
-    dataframe_para_prn(df_movimentacoes, 'movimentacoes.prn', larguras)
-
-    print("Processamento concluído com sucesso!")
-
-
+    dataframe_para_prn(df_movimentacoes, 'movimentacoes.prn')
