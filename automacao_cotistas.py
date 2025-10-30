@@ -69,12 +69,12 @@ def process_excel_files(dir_path):
 
 def carregar_fundos_multiplos(diretorio):
     fundos_ids_padrao = {
-        'FIDCSENIOR': 20711,
-        'FIDCMEZ1': 20731,
-        'FIDCMEZ2': 20732,
-        'FIDCMEZ3': 20733,
-        'FIDCMEZ4': 20734,
-        'FIDCMEZ5': 20735
+        'COTADEF1': 20711,
+        'COTADEF2': 20731,
+        'COTADEF3': 20732,
+        'COTADEF4': 20733,
+        'COTADEF5': 20734,
+        'COTADEF6': 20735
     }
 
     arquivos_excel = [os.path.join(diretorio, f) for f in os.listdir(diretorio) if f.endswith(('.xls', '.xlsx'))]
@@ -168,9 +168,9 @@ def dataframe_para_prn(df, nome_arquivo):
 # ============================
 
 if __name__ == "__main__":
-    caminho_cotistas = r'Z:\MER\Contratados\Estagiários\Rodrigo Farias\A MOV DIA PETRO\cotistas\Lista Cotistas.csv'
-    dir_fundos = r'Z:\\MER\\Contratados\\Estagiários\\Rodrigo Farias\\A MOV DIA PETRO\\transacoes'
-    dir_path = r'Z:\\MER\\Contratados\\Estagiários\\Rodrigo Farias\\A MOV DIA PETRO\\transacoes'
+    caminho_cotistas = r'.\'
+    dir_fundos = r'.\'
+    dir_path = r'.\'
 
     if not os.path.exists(caminho_cotistas):
         raise FileNotFoundError(f"Arquivo não encontrado: {caminho_cotistas}")
