@@ -114,7 +114,7 @@ cotistas = remove_chars_and_terms(cotistas, 'Nome')
 transacoes_files = st.file_uploader("Upload dos Arquivos de Transações (.xls, .xlsx)", type=["xls", "xlsx"], accept_multiple_files=True)
 
 if transacoes_files:
-    cotistas = pd.read_csv(cotistas_file, delimiter=';')
+   cotistas = pd.read_csv("assets/cotistas.csv", delimiter=';')
     cotistas = remove_chars_and_terms(cotistas, 'Nome')
 
     dfs = []
