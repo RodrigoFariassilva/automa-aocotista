@@ -1,9 +1,8 @@
+import streamlit as st
 import pandas as pd
-import openpyxl
-import unicodedata
 import numpy as np
-import os
-import json
+import unicodedata
+import io
 
 # ============================
 # Funções utilitárias
@@ -26,75 +25,6 @@ def remove_chars_and_terms(df, col_name):
             df[col_name] = df[col_name].str.replace(char_or_term, '', case=False, regex=False)
         df[col_name] = df[col_name].apply(remove_accents)
     return df
-
-# ============================
-# Carregamento de arquivos
-# ============================
-
-def carregar_csv(caminho_arquivo):
-    try:
-        df = pd.read_csv(caminho_arquivo, delimiter=';')
-        return df
-    except Exception as e:
-        print(f"Erro ao carregar CSV: {e}")
-        return pd.DataFrame()
-
-def carregar_excel(caminho_arquivo):
-    try:
-        df = pd.read_excel(caminho_arquivo, engine="openpyxl")
-        return df
-    except Exception as e:
-        print(f"Erro ao carregar Excel: {e}")
-        return pd.DataFrame()
-
-def process_excel_files(dir_path):
-    dfs = {}
-    try:
-        arquivos = os.listdir(dir_path)
-        print("Arquivos encontrados:", arquivos)  # Opcional para debug
-        for i, filename in enumerate(arquivos, start=1):
-            if filename.endswith(('.xlsx', '.xls')):
-                file_path = os.path.join(dir_path, filename)
-                try:
-                    # Usa openpyxl para .xlsx e xlrd para .xls
-                    engine = 'openpyxl' if filename.endswith('.xlsx') else 'xlrd'
-                    df = pd.read_excel(file_path, engine=engine)
-                    dfs[f'df{i}'] = df
-                except Exception as e:
-                    print(f"Erro ao ler {file_path}: {e}")
-        return dfs
-    except Exception as e:
-        print(f"Erro ao processar arquivos Excel: {e}")
-        return {}
-
-def carregar_fundos_multiplos(diretorio):
-    fundos_ids_padrao = {
-        'COTADEF1': 20711,
-        'COTADEF2': 20731,
-        'COTADEF3': 20732,
-        'COTADEF4': 20733,
-        'COTADEF5': 20734,
-        'COTADEF6': 20735
-    }
-
-    arquivos_excel = [os.path.join(diretorio, f) for f in os.listdir(diretorio) if f.endswith(('.xls', '.xlsx'))]
-    dfs = []
-    for arquivo in arquivos_excel:
-        try:
-            df = pd.read_excel(arquivo, engine='openpyxl' if arquivo.endswith('.xlsx') else None)
-            dfs.append(df)
-        except Exception as e:
-            print(f"Erro ao ler {arquivo}: {e}")
-    df_fundos = pd.concat(dfs, ignore_index=True)
-
-    df_fundos.columns = [col.strip().upper() for col in df_fundos.columns]
-    df_fundos = normalize_column(df_fundos, 'FUNDO')
-
-    if 'ID_FUNDO' not in df_fundos.columns:
-        df_fundos['ID_FUNDO'] = df_fundos['FUNDO'].map(fundos_ids_padrao).fillna(20711).astype(int)
-
-    fundos_ids = dict(zip(df_fundos['FUNDO'], df_fundos['ID_FUNDO']))
-    return df_fundos, fundos_ids
 
 # ============================
 # Funções de transformação
@@ -131,10 +61,6 @@ def adicionar_id_fundo(df_movimentacoes, fundos_ids):
     df_movimentacoes['ID_Fundo'] = df_movimentacoes['ID'].astype(str)
     return df_movimentacoes
 
-# ============================
-# Formatação final
-# ============================
-
 def reordenar_colunas(df):
     nova_ordem = ['ID_Fundo', 'Cliente', 'Transacao', 'DT.TRANSAÇÃO', 'Valor']
     return df.reindex(columns=nova_ordem)
@@ -144,46 +70,45 @@ def formatar_data(df):
     return df
 
 def ajustar_valor(df):
-    df['Valor'] = df['Valor'].apply(lambda val: "{:015.2f}".format(val).replace('.', ','))
+    df['Valor'] = df['Valor'].fillna(0).apply(lambda val: "{:015.2f}".format(val).replace('.', ','))
     return df
 
-def dataframe_para_prn(df, nome_arquivo):
-    # Define as posições iniciais de cada coluna
+def dataframe_para_prn(df):
     posicoes = [0, 15, 34, 44, 69]
     colunas = ['ID_Fundo', 'Cliente', 'Transacao', 'DT.TRANSAÇÃO', 'Valor']
-
-    with open(nome_arquivo, 'w', encoding='utf-8') as f:
-        for _, row in df.iterrows():
-            linha = [' '] * 100  # linha com 100 espaços (ajustável)
-            for i, col in enumerate(colunas):
-                valor = str(row[col])
-                for j, char in enumerate(valor):
-                    if posicoes[i] + j < len(linha):
-                        linha[posicoes[i] + j] = char
-            f.write(''.join(linha).rstrip() + '\n')
-
+    output = io.StringIO()
+    for _, row in df.iterrows():
+        linha = [' '] * 100
+        for i, col in enumerate(colunas):
+            valor = str(row[col])
+            for j, char in enumerate(valor):
+                if posicoes[i] + j < len(linha):
+                    linha[posicoes[i] + j] = char
+        output.write(''.join(linha).rstrip() + '\n')
+    return output.getvalue()
 
 # ============================
-# Fluxo principal
+# Interface Streamlit
 # ============================
 
-if __name__ == "__main__":
-    caminho_cotistas = r'.\'
-    dir_fundos = r'.\'
-    dir_path = r'.\'
+st.title("Processador de Movimentações Financeiras")
 
-    if not os.path.exists(caminho_cotistas):
-        raise FileNotFoundError(f"Arquivo não encontrado: {caminho_cotistas}")
-    if not os.path.exists(dir_fundos):
-        raise FileNotFoundError(f"Diretório não encontrado: {dir_fundos}")
-    if not os.path.exists(dir_path):
-        raise FileNotFoundError(f"Diretório não encontrado: {dir_path}")
+cotistas_file = st.file_uploader("Upload da Lista de Cotistas (.csv)", type=["csv"])
+transacoes_files = st.file_uploader("Upload dos Arquivos de Transações (.xls, .xlsx)", type=["xls", "xlsx"], accept_multiple_files=True)
 
-    cotistas = carregar_csv(caminho_cotistas)
+if cotistas_file and transacoes_files:
+    cotistas = pd.read_csv(cotistas_file, delimiter=';')
     cotistas = remove_chars_and_terms(cotistas, 'Nome')
 
-    dfs = process_excel_files(dir_path)
-    df_transacoes = pd.concat(dfs.values(), ignore_index=True)
+    dfs = []
+    for file in transacoes_files:
+        try:
+            df = pd.read_excel(file)
+            dfs.append(df)
+        except Exception as e:
+            st.error(f"Erro ao ler {file.name}: {e}")
+
+    df_transacoes = pd.concat(dfs, ignore_index=True)
     df_transacoes = selecionar_colunas(df_transacoes)
     df_transacoes = titulares(df_transacoes)
     df_transacoes = remove_chars_and_terms(df_transacoes, 'TITULAR')
@@ -192,10 +117,25 @@ if __name__ == "__main__":
 
     df_movimentacoes = processar_transacoes(df_transacoes)
 
-    df_fundos, fundos_ids = carregar_fundos_multiplos(dir_fundos)
-    df_movimentacoes = adicionar_id_fundo(df_movimentacoes, fundos_ids)
+    fundos_ids_padrao = {
+        'FIDCSENIOR': 20711,
+        'FIDCMEZ1': 20731,
+        'FIDCMEZ2': 20732,
+        'FIDCMEZ3': 20733,
+        'FIDCMEZ4': 20734,
+        'FIDCMEZ5': 20735
+    }
+
+    df_movimentacoes = adicionar_id_fundo(df_movimentacoes, fundos_ids_padrao)
     df_movimentacoes = reordenar_colunas(df_movimentacoes)
     df_movimentacoes = formatar_data(df_movimentacoes)
     df_movimentacoes = ajustar_valor(df_movimentacoes)
 
-    dataframe_para_prn(df_movimentacoes, 'movimentacoes.prn')
+    st.subheader("Prévia dos dados processados")
+    st.dataframe(df_movimentacoes.head())
+
+    prn_content = dataframe_para_prn(df_movimentacoes)
+    st.download_button("Baixar Arquivo PRN", prn_content, file_name="movimentacoes.prn", mime="text/plain")
+
+else:
+    st.info("Por favor, envie os arquivos necessários para iniciar o processamento.")
