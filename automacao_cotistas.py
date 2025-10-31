@@ -100,7 +100,23 @@ st.set_page_config(
 )
 
 cotistas_file = st.file_uploader("Upload da Lista de Cotistas (.csv)", type=["csv"])
-transacoes_files = st.file_uploader("Upload dos Arquivos de Transações (.xls, .xlsx)", type=["xls", "xlsx"], accept_multiple_files=True)
+def ler_arquivo_transacoes(file):
+    try:
+        content = file.read().decode('utf-16')
+        df = pd.read_csv(io.StringIO(content), sep='\t')
+    except Exception:
+        file.seek(0)
+        df = pd.read_excel(file)
+    return df
+
+dfs = []
+for file in transacoes_files:
+    try:
+        df = ler_arquivo_transacoes(file)
+        df = selecionar_colunas(df)
+        dfs.append(df)
+    except Exception as e:
+        st.error(f"Erro ao ler {file.name}: {e}")
 
 if cotistas_file and transacoes_files:
     cotistas = pd.read_csv(cotistas_file, delimiter=';')
