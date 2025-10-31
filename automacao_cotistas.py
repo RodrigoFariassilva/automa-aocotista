@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import unicodedata
 import io
+import openpyxl
+import xlrd
 
 # ============================
 # Funções utilitárias
