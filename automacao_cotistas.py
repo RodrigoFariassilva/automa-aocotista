@@ -108,7 +108,7 @@ st.set_page_config(
 
 st.title("Processador de Movimentações Financeiras")
 cotistas_path = "assets/Lista Cotistas.csv"
-cotistas = pd.read_csv(cotistas_path, delimiter=';')
+cotistas = pd.read_csv("assets/cotistas.csv", delimiter=';')
 cotistas = remove_chars_and_terms(cotistas, 'Nome')
 
 transacoes_files = st.file_uploader("Upload dos Arquivos de Transações (.xls, .xlsx)", type=["xls", "xlsx"], accept_multiple_files=True)
