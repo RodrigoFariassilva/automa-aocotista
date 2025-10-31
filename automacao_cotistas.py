@@ -3,13 +3,10 @@ import pandas as pd
 import numpy as np
 import unicodedata
 import io
-import openpyxl
-import xlrd
 
 # ============================
 # Funções utilitárias
 # ============================
-
 def remove_accents(input_str):
     nfkd_form = unicodedata.normalize('NFKD', input_str)
     return u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
@@ -31,17 +28,17 @@ def remove_chars_and_terms(df, col_name):
 # ============================
 # Funções de transformação
 # ============================
-
 def selecionar_colunas(df):
-    df = df[['TITULAR', 'DT.TRANSAÇÃO', 'APLICAR', 'RESGATAR', 'FUNDO']].copy()
+    colunas_necessarias = ['TITULAR', 'DT.TRANSAÇÃO', 'APLICAR', 'RESGATAR', 'FUNDO']
+    df = df[colunas_necessarias].copy()
     df['TITULAR'] = df['TITULAR'].astype(str)
     df['DT.TRANSAÇÃO'] = df['DT.TRANSAÇÃO'].astype(str)
-    df['APLICAR'] = df['APLICAR'].astype(float)
-    df['RESGATAR'] = df['RESGATAR'].astype(float)
+    df['APLICAR'] = pd.to_numeric(df['APLICAR'], errors='coerce')
+    df['RESGATAR'] = pd.to_numeric(df['RESGATAR'], errors='coerce')
     return df
 
 def titulares(df_transacoes):
-    df_transacoes = df_transacoes[~df_transacoes['TITULAR'].str.contains("TOTAL DA MOVIMENTAÇÃO:")].copy()
+    df_transacoes = df_transacoes[~df_transacoes['TITULAR'].str.contains("TOTAL DA MOVIMENTAÇÃO:", na=False)].copy()
     df_transacoes['TITULAR'] = df_transacoes['TITULAR'].str[6:].str.strip()
     return df_transacoes
 
@@ -90,53 +87,50 @@ def dataframe_para_prn(df):
     return output.getvalue()
 
 # ============================
-# Interface Streamlit
+# Função para leitura de arquivos de transações
 # ============================
-
-st.title("Processador de Movimentações Financeiras")
-st.set_page_config(
-    page_title="Automação Cotista",
-    page_icon="P:\MER\Contratados\Estagiários\Rodrigo Farias\A MOV DIA PETRO_V3\banco-do-brasil-logo-4-768x768",
-)
-
-cotistas_file = st.file_uploader("Upload da Lista de Cotistas (.csv)", type=["csv"])
 def ler_arquivo_transacoes(file):
     try:
         content = file.read().decode('utf-16')
         df = pd.read_csv(io.StringIO(content), sep='\t')
     except Exception:
         file.seek(0)
-        df = pd.read_excel(file)
+        df = pd.read_excel(file, engine='xlrd')
     return df
 
-dfs = []
-for file in transacoes_files:
-    try:
-        df = ler_arquivo_transacoes(file)
-        df = selecionar_colunas(df)
-        dfs.append(df)
-    except Exception as e:
-        st.error(f"Erro ao ler {file.name}: {e}")
+# ============================
+# Interface Streamlit
+# ============================
+st.set_page_config(
+    page_title="Automação Cotista",
+    page_icon="",
+)
+
+st.title("Processador de Movimentações Financeiras")
+
+cotistas_file = st.file_uploader("Upload da Lista de Cotistas (.csv)", type=["csv"])
+transacoes_files = st.file_uploader("Upload dos Arquivos de Transações (.xls, .xlsx)", type=["xls", "xlsx"], accept_multiple_files=True)
 
 if cotistas_file and transacoes_files:
     cotistas = pd.read_csv(cotistas_file, delimiter=';')
     cotistas = remove_chars_and_terms(cotistas, 'Nome')
 
     dfs = []
-    for file in transacoes_files:
+    arquivos = transacoes_files if isinstance(transacoes_files, list) else [transacoes_files]
+
+    for file in arquivos:
         try:
-            df = pd.read_excel(file)
+            df = ler_arquivo_transacoes(file)
+            df = selecionar_colunas(df)
             dfs.append(df)
         except Exception as e:
             st.error(f"Erro ao ler {file.name}: {e}")
 
     df_transacoes = pd.concat(dfs, ignore_index=True)
-    df_transacoes = selecionar_colunas(df_transacoes)
     df_transacoes = titulares(df_transacoes)
     df_transacoes = remove_chars_and_terms(df_transacoes, 'TITULAR')
     cotistas = remove_chars_and_terms(cotistas, 'Nome')
     df_transacoes = left_merge(df_transacoes, cotistas)
-
     df_movimentacoes = processar_transacoes(df_transacoes)
 
     fundos_ids_padrao = {
@@ -158,6 +152,5 @@ if cotistas_file and transacoes_files:
 
     prn_content = dataframe_para_prn(df_movimentacoes)
     st.download_button("Baixar Arquivo PRN", prn_content, file_name="movimentacoes.prn", mime="text/plain")
-
 else:
     st.info("Por favor, envie os arquivos necessários para iniciar o processamento.")
