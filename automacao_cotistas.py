@@ -1,8 +1,11 @@
+# automacao_cotistas.py
+
 import streamlit as st
 import pandas as pd
 import numpy as np
 import unicodedata
 import io
+import os
 
 # ============================
 # Funções utilitárias
@@ -107,16 +110,18 @@ st.set_page_config(
 )
 
 st.title("Processador de Movimentações Financeiras")
-cotistas_path = "assets/Lista Cotistas.csv"
-cotistas = pd.read_csv("assets/cotistas.csv", delimiter=';')
-cotistas = remove_chars_and_terms(cotistas, 'Nome')
+
+cotistas_path = "assets/cotistas.csv"
+if os.path.exists(cotistas_path):
+    cotistas = pd.read_csv(cotistas_path, delimiter=';')
+    cotistas = remove_chars_and_terms(cotistas, 'Nome')
+else:
+    st.error("Arquivo 'assets/cotistas.csv' não encontrado. Por favor, verifique se o arquivo está na pasta correta.")
+    st.stop()
 
 transacoes_files = st.file_uploader("Upload dos Arquivos de Transações (.xls, .xlsx)", type=["xls", "xlsx"], accept_multiple_files=True)
 
 if transacoes_files:
-    cotistas = pd.read_csv("assets/cotistas.csv", delimiter=';')
-    cotistas = remove_chars_and_terms(cotistas, 'Nome')
-
     dfs = []
     arquivos = transacoes_files if isinstance(transacoes_files, list) else [transacoes_files]
 
@@ -131,7 +136,6 @@ if transacoes_files:
     df_transacoes = pd.concat(dfs, ignore_index=True)
     df_transacoes = titulares(df_transacoes)
     df_transacoes = remove_chars_and_terms(df_transacoes, 'TITULAR')
-    cotistas = remove_chars_and_terms(cotistas, 'Nome')
     df_transacoes = left_merge(df_transacoes, cotistas)
     df_movimentacoes = processar_transacoes(df_transacoes)
 
