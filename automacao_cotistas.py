@@ -103,7 +103,7 @@ def ler_arquivo_transacoes(file):
 # ============================
 st.set_page_config(
     page_title="Automação Cotista",
-    page_icon="",
+    page_icon="assets/logo.ico",
 )
 
 st.title("Processador de Movimentações Financeiras")
