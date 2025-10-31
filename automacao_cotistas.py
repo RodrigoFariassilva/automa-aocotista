@@ -94,6 +94,10 @@ def dataframe_para_prn(df):
 # ============================
 
 st.title("Processador de Movimentações Financeiras")
+st.set_page_config(
+    page_title="Automação Cotista",
+    page_icon="P:\MER\Contratados\Estagiários\Rodrigo Farias\A MOV DIA PETRO_V3\banco-do-brasil-logo-4-768x768",
+)
 
 cotistas_file = st.file_uploader("Upload da Lista de Cotistas (.csv)", type=["csv"])
 transacoes_files = st.file_uploader("Upload dos Arquivos de Transações (.xls, .xlsx)", type=["xls", "xlsx"], accept_multiple_files=True)
