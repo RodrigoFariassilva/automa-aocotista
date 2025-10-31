@@ -107,7 +107,7 @@ st.set_page_config(
 )
 
 st.title("Processador de Movimentações Financeiras")
-cotistas_path = "assets/cotistas.csv"
+cotistas_path = "assets/Lista Cotistas.csv"
 cotistas = pd.read_csv(cotistas_path, delimiter=';')
 cotistas = remove_chars_and_terms(cotistas, 'Nome')
 
