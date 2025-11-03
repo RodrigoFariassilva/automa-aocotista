@@ -94,11 +94,16 @@ def dataframe_para_prn(df):
 # ============================
 def ler_arquivo_transacoes(file):
     try:
+        # Tenta ler como CSV codificado em UTF-16
         content = file.read().decode('utf-16')
         df = pd.read_csv(io.StringIO(content), sep='\t')
     except Exception:
-        file.seek(0)
-        df = pd.read_excel(file, engine='xlrd')
+        try:
+            file.seek(0)  # Volta ao início do arquivo
+            df = pd.read_excel(file, engine='openpyxl')  # Tenta ler como XLSX
+        except Exception:
+            file.seek(0)
+            df = pd.read_excel(file, engine='xlrd')  # Tenta ler como XLS (caso antigo)
     return df
 
 # ============================
