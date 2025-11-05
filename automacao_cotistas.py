@@ -145,12 +145,12 @@ if transacoes_files:
     df_movimentacoes = processar_transacoes(df_transacoes)
 
     fundos_ids_padrao = {
-        'FIDCSENIOR': 20711,
-        'FIDCMEZ1': 20731,
-        'FIDCMEZ2': 20732,
-        'FIDCMEZ3': 20733,
-        'FIDCMEZ4': 20734,
-        'FIDCMEZ5': 20735
+         'FIALFACO' : 20711,
+'FINOVAC' : 20731,
+'FIPRISMAC' : 20732,
+'FIORIONB' : 20733,
+'FISIGMACHAD': 20734,
+'FINEXUSBLU' : 20735,
     }
 
     df_movimentacoes = adicionar_id_fundo(df_movimentacoes, fundos_ids_padrao)
